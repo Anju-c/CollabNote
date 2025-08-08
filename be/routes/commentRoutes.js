@@ -10,7 +10,7 @@ module.exports = (prisma, io, authenticateToken) => {
         where: { noteId: noteId },
         include: {
           author: {
-            select: { username: true }
+            select: { id: true, username: true }
           }
         },
         orderBy: {
@@ -29,11 +29,29 @@ module.exports = (prisma, io, authenticateToken) => {
     const { text } = req.body;
     const authorId = req.user.userId;
 
+    console.log(`💬 Adding comment to note ${noteId}:`);
+    console.log(`   Author ID: ${authorId}`);
+    console.log(`   Username from token: ${req.user.username}`);
+    console.log(`   Comment text: ${text}`);
+
     if (!text || !authorId) {
       return res.status(400).json({ message: 'Comment text and user are required.' });
     }
 
     try {
+      // Verify the user exists in database
+      const user = await prisma.user.findUnique({
+        where: { id: authorId },
+        select: { id: true, username: true }
+      });
+
+      if (!user) {
+        console.error(`❌ User not found in database: ${authorId}`);
+        return res.status(401).json({ message: 'User not found.' });
+      }
+
+      console.log(`✅ Verified user exists: ${user.username} (${user.id})`);
+
       const newComment = await prisma.comment.create({
         data: {
           text: text,
@@ -42,16 +60,25 @@ module.exports = (prisma, io, authenticateToken) => {
         },
         include: {
           author: {
-            select: { username: true }
+            select: { id: true, username: true }
           }
         }
       });
 
+      console.log(`✅ Created comment:`, {
+        id: newComment.id,
+        authorId: newComment.authorId,
+        authorUsername: newComment.author.username,
+        text: newComment.text.substring(0, 50) + '...'
+      });
+
+      // Broadcast to all connected clients in this note room
       io.to(noteId).emit('new-comment-from-server', newComment);
+      console.log(`📡 Broadcasted comment to note room ${noteId}`);
 
       res.status(201).json(newComment);
     } catch (error) {
-      console.error(`Error adding comment to note ${noteId}:`, error);
+      console.error(`❌ Error adding comment to note ${noteId}:`, error);
       res.status(500).json({ message: 'Internal server error adding comment.' });
     }
   });

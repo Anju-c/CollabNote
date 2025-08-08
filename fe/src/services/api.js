@@ -26,6 +26,18 @@ export const createNote = async () => {
   return response.json();
 };
 
+export const getRecentNotes = async () => {
+  const response = await fetch(`${API_BASE_URL}/notes/recent`, {
+    method: 'GET',
+    headers: getHeaders(),
+  });
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.message || 'Failed to fetch recent notes.');
+  }
+  return response.json();
+};
+
 // --- Auth API ---
 export const registerUser = async (username, password) => {
   const response = await fetch(`${API_BASE_URL}/auth/register`, {
